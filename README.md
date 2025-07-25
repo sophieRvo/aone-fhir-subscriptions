@@ -1,6 +1,8 @@
 # athenahealth Event Subscription Platform
 
-*v0.11 - 2024-11-19*
+*v0.11 - 2024-11-19 -  Eventing Alpha Launch*
+
+*v0.12 - 2025-07-25 -  Enabled Filtering Capability*
 
 ## 1 - Background
 
@@ -110,8 +112,13 @@ curl --request POST https://api.platform.athenahealth.com/fhir/r4/Subscription \
       "extension": [
         {
           "url": "http://hl7.org/fhir/uv/subscriptions-backport/StructureDefinition/backport-filter-criteria",
-          "valueString": "ah-practice=Organization/a-1.Practice-195900"
-        }
+          "valueString": "ah-practice=Organization/a-1.Practice-195000,Organization/a-1.Practice-195001"
+        },
+        {
+          "url": "http://hl7.org/fhir/uv/subscriptions-backport/StructureDefinition/backport-filter-criteria",
+          "valueString": "ah-department=Organization/a-195000.Department-1,Organization/a-195000.Department-12,Organization/a-195001.Department-1"
+        },
+        
       ]
     },
     "channel": {
@@ -142,7 +149,142 @@ Response:
 
 The `X-Hub-Secret` header is optional but _strongly recommended_ to allow your webhook to verify authenticity of the notification messages received and ensure that the payload originated from athenahealth.  If provided, this secret will be used to generate an HMAC signature for each outbound notification as described at [https://www.w3.org/TR/websub/#signing-content](https://www.w3.org/TR/websub/#signing-content).
 
-### 3.4 - Deleting a Subscription
+### 3.4 - Filters
+
+Events can be filtered using the _criteria object, where each filter is added as an extension. In the example above, the consumer has subscribed to two contexts and three departments. An implicit AND condition applies between these filters (ah-practice AND ah-department), meaning both filter conditions must be satisfied for the event to be delivered to the consumer.
+
+Filters should be specified using the following format:
+
+` "valueString": "<filter-parameter>=<value1>,<value2>,<value3>, ..., <value2000>" `
+The valueString must conform to the regex pattern defined for the respective filter.<br />
+Following are the filters available now. <br />
+
+#### <a name="ah-practice"> </a> ah-practice  <br />
+
+<table>
+    <thead>
+        <tr>
+            <th>Regex</th>
+            <th>URL</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>ah-practice=Organization/a-1.Practice-[practiceId]</td>
+            <td>https://fhir.athena.io/SearchParameter/ah-practice</td>
+        </tr>
+    </tbody> 
+</table>           
+<br />
+
+#### <a name="ah-department"> </a> ah-department  <br />
+<table>
+    <thead>
+        <tr>
+            <th>Regex</th>
+            <th>URL</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>ah-department=Organization/a-[practiceId].Department-[deptId]</td>
+            <td>https://fhir.athena.io/SearchParameter/ah-department</td>
+        </tr>
+    </tbody> 
+</table>           
+<br />
+
+Filter Guidelines
+
+a. The maximum number of values supported in a filter parameter is 2000. <br />
+b. An OR condition is not supported across filter parameters (e.g., PRACTICE or DEPARTMENT). <br />
+c. An AND condition is not supported within a single filter parameter. <br />
+d. To subscribe to all departments within a context, use the asterisk `*`. For example: ah-department=Organization/a-<CONTEXT_ID>.Department-* <br />
+e. When using the `ah-department` filter, ensure that all contexts included in the ah-department values are also present in the ah-practice filter; otherwise, due to the AND condition, events may be missed. <br />
+
+
+### 3.5 - Subscription Creation Rules 
+
+a. ah-practice filter is mandatory for subscription <br />
+
+b. Consumer can subscribe to only one event per subscription. <br />
+   &nbsp;&nbsp;&nbsp; To subscribe to multiple events , repeat the subscription process for each event. 
+   
+c. Consumer can subscribe to multiple contexts per subscription. <br />
+
+d. Consumer can use either a single Webhook URL for all their subscriptions ( for different context and/or event ) or multiple Webhook URLs across subscriptions. <br />
+   &nbsp;&nbsp;&nbsp; For Example: If you need to set up 10 subscriptions, you can either set up one Webhook URL for all 10 subscriptions, or a different Webhook URL for each of the 10 
+   subscriptions, or any combination such as 4 different Webhook URLs across those 10 subscriptions. The setup can be tailored to the requirements, use case, or technical feasibility.
+
+### 3.6 - Updating a Subscription
+
+To update an existing subscription of a topic, you should call the `PUT /Subscription/{id}` endpoint.  This endpoint requires the `system/Subscription.write` scope.
+
+Request:
+```
+curl --request PUT https://api.platform.athenahealth.com/fhir/r4/Subscription \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --header 'X-Hub-Secret: <random-shared-secret>' \
+  --data-raw '{
+    "resourceType": "Subscription",
+    "id": "a9c3784c-9f56-4b32-95b0-882868d39e58",
+    "meta": {
+        "profile": [
+            "http://hl7.org/fhir/uv/subscriptions-backport/StructureDefinition/backport-subscription"
+        ]
+    },
+    "status": "requested",
+    "end": "2022-12-31T12:00:00Z",
+    "reason": "For testing",
+    "criteria": "https://api.platform.athenahealth.com/fhir/r4/SubscriptionTopic/Patient.update",
+    "_criteria": {
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/uv/subscriptions-backport/StructureDefinition/backport-filter-criteria",
+          "valueString": "ah-practice=Organization/a-1.Practice-195000,Organization/a-1.Practice-195001,Organization/a-1.Practice-195002"
+        },
+        {
+          "url": "http://hl7.org/fhir/uv/subscriptions-backport/StructureDefinition/backport-filter-criteria",
+          "valueString": "ah-department=Organization/a-195000.Department-1,Organization/a-195000.Department-12,Organization/a-195001.Department-1"
+        },
+        
+      ]
+    },
+    "channel": {
+        "type": "rest-hook",
+        "endpoint": "https://example.org/your-webhook",
+        "payload": "application/fhir+json",
+        "_payload": {
+            "extension": [
+                {
+                    "url": "http://hl7.org/fhir/uv/subscriptions-backport/StructureDefinition/backport-payload-content",
+                    "valueCode": "id-only"
+                }
+            ]
+        }
+    }
+}'
+```
+
+Response:
+```
+201 Created
+{
+  "resourceType": "Subscription",
+  "id": "a9c3784c-9f56-4b32-95b0-882868d39e58",
+  ...
+}
+```
+
+In the example above, the `ah-practice` filter within the subscription has been updated to include a new context. When adding new contexts, please ensure that you have the necessary access permissions for those contexts. Departments can be added or removed following the same procedure. To remove an entire filter, delete the corresponding extension object from the array. <br />
+
+### 3.7 - Subscription Updation Rules 
+
+a. Consumer cannot update the webhook URL of existing subscription. <br /> &nbsp;&nbsp;&nbsp; If required, you can delete the existing subscription and create a new one. <br />
+b. It will take upto 15 minutes for the Filter creation/updation to take effect. <br />
+
+### 3.8 - Deleting a Subscription
 
 To unsubscribe from a topic you will need to call the `DELETE /Subscription/{id}` endpoint.  This endpoint requires the `system/Subscription.write` scope.
 
@@ -156,7 +298,7 @@ Response:
 204 No Content
 ```
 
-### 3.5 - Listing your Subscriptions
+### 3.9 - Listing your Subscriptions
 
 If you do not know your Subscription ID, you can use the `GET /Subscription` search to find it.  This endpoint requires the `system/Subscription.read` scope.
 
@@ -188,6 +330,9 @@ Response:
 ```
 
 Alternatively, you can also find your Subscription ID in any subscription notification Bundle under `entry[0].resource.subscription.reference` (see example [event payload](#event-payload) below).
+
+
+
 
 &nbsp;  
 
@@ -399,7 +544,9 @@ Instead we follow the message receipt acknowledgement approach recommended by th
 
 ### <a name="keep-webhook-processing-fast"></a> 5.2 - Keep Webhook Processing Fast
 
-The athenahealth Event Subscription Platform expects your webhook to return a 2xx response code within a *timeout limit of 2 seconds*.  This is a hard limit and cannot be increased.  To ensure that your webhook responds quickly as well as to avoid duplicative processing in case of partial failures, we *strongly recommend* that you utilize a durable queuing mechanism to safely decouple event *delivery* from event *processing*.  For example, one good pattern is a webhook that persists events into a durable message queue where they can be consumed, inflated, and processed by a separate application.  This decoupling helps provide resilience to intermittent traffic spikes:  events can quickly be queued and acknowledged by the webhook even if the downstream processing of those events may require additional time.
+The athenahealth Event Subscription Platform expects your webhook to return a 2xx response code within a *timeout limit of 2 seconds*.  This is a hard limit and cannot be increased. If the timeout crosses 2 seconds, our delivery service will assume that your webhook is down and will retry failures and timeouts periodically for up to 7 days.
+
+To ensure that your webhook responds quickly as well as to avoid duplicative processing in case of partial failures, we *strongly recommend* that you utilize a durable queuing mechanism to safely decouple event *delivery* from event *processing*.  For example, one good pattern is a webhook that persists events into a durable message queue where they can be consumed, inflated, and processed by a separate application.  This decoupling helps provide resilience to intermittent traffic spikes:  events can quickly be queued and acknowledged by the webhook even if the downstream processing of those events may require additional time.
 
 Many robust message queue implementations exist, including but not limited to:  Apache Kafka, Amazon SQS, Google Cloud Pub/Sub, RabbitMQ, etc.
 
@@ -409,15 +556,27 @@ As noted above, the `X-Hub-Signature` header can be used to verify that a messag
 
 &nbsp;
 
-## 6 - Appendix
-
-### <a name="subscription-topics"></a> 6.1 - Subscription Topics
+## <a name="subscription-topics"></a> 6 - Subscription Topics
 
 Below is the list of event topics available for subscription in the alpha phase.  Also provided is a reference to the FHIR R4 and/or athenahealth proprietary API endpoints that can be used to retrieve the current state of the focus resource referenced in the event.  Note that some resources are available in FHIR R4 format while others are not, so the `focusResource` reference within the event notification will include one or both of the following:
 - a relative literal reference if resource is available as a FHIR R4 endpoint
 - a logical reference (identifier) if resource is available in athenahealth proprietary format
 
-#### Appointment
+### AdminDocument  [Alpha]
+
+Topics:
+- AdminDocument.create
+- AdminDocument.update
+- AdminDocument.delete
+- AdminDocument.remove-after-reclassify
+
+Filters Applicable:
+- [ah-practice](#ah-practice)
+
+API endpoint(s) to retrieve resource content:
+- [GET /v1/{practiceid}/documents/admin/{adminid}](https://docs.athenahealth.com/api/api-ref/document-type-admin-document#Get-specific-admin-document-without-specifying-patient-ID)
+
+### Appointment
 
 Topics:
 - Appointment.cancel
@@ -429,63 +588,101 @@ Topics:
 - Appointment.unfreeze
 - Appointment.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /v1/{practiceid}/appointments/{appointmentid}](https://docs.athenahealth.com/api/api-ref/appointment#Get-appointment-details)
 
-#### Claim
+### Claim
 
 Topics:
 - Claim.create
 - Claim.delete
 - Claim.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department) (only for delete)  
+
 API endpoint(s) to retrieve resource content:
 - [GET /v1/{practiceid}/claims/{claimid}](https://docs.athenahealth.com/api/api-ref/claim#Get-individual-claim-details)
 
-#### ClinicalEncounterDiagnosis
+### ClinicalDocument  [Alpha]
+
+Topics:
+- ClinicalDocument.create
+- ClinicalDocument.update
+- ClinicalDocument.delete
+- ClinicalDocument.remove-after-reclassify
+
+Filters Applicable:
+- [ah-practice](#ah-practice)
+
+API endpoint(s) to retrieve resource content:
+- [GET /v1/{practiceid}/patients/{patientid}/documents/clinicaldocument/{clinicaldocumentid}](https://docs.athenahealth.com/api/api-ref/document-type-clinical-document#Get-patient's-clinical-document)  
+
+### ClinicalEncounterDiagnosis
 
 Topics:
 - ClinicalEncounterDiagnosis.create
 - ClinicalEncounterDiagnosis.delete
 - ClinicalEncounterDiagnosis.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/Condition/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/condition#READ_6)
 
-#### Encounter
+### Encounter
 
 Topics:
 - Encounter.check-in
 - Encounter.reopen
 - Encounter.signoff
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/Encounter/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/encounter#READ_6)
 - [GET /v1/{practiceid}/chart/encounter/{encounterid}](https://docs.athenahealth.com/api/api-ref/encounter-chart#Get-encounter-information)
 
-#### HistoricalMedication
+### HistoricalMedication
 
 Topics:
 - HistoricalMedication.create
 - HistoricalMedication.delete
 - HistoricalMedication.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/MedicationRequest/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/medication-request#READ_6)
 - [GET /v1/{practiceid}/chart/{patientid}/medications](https://docs.athenahealth.com/api/api-ref/medication#Get-patient's-medication-list)
 
-#### HistoricalVaccine
+### HistoricalVaccine
 
 Topics:
 - HistoricalVaccine.create
 - HistoricalVaccine.delete
 - HistoricalVaccine.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/Immunization/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/immunization#READ_6)
 - [GET /v1/{practiceid}/chart/{patientid}/vaccines](https://docs.athenahealth.com/api/api-ref/vaccines#Get-list-of-patient's-vaccines)
 
-#### ImagingResult
+### ImagingResult
 
 Topics:
 - ImagingResult.close
@@ -494,20 +691,42 @@ Topics:
 - ImagingResult.reopen
 - ImagingResult.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /v1/{practiceid}/patients/{patientid}/documents/imagingresult/{imagingresultid}](https://docs.athenahealth.com/api/api-ref/document-type-imaging-result#Get-patient's-imaging-result-document)
 
-#### LabResult
+### LabResult
 
 Topics:
 - LabResult.close
 - LabResult.create
 - LabResult.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /v1/{practiceid}/patients/{patientid}/documents/labresult/{labresultid}](https://docs.athenahealth.com/api/api-ref/document-type-lab-result#Get-patient's-lab-result-document)
 
-#### Order
+### MedicalRecord  [Alpha]
+
+Topics:
+- MedicalRecord.create
+- MedicalRecord.update
+- MedicalRecord.delete
+- MedicalRecord.remove-after-reclassify
+
+Filters Applicable:
+- [ah-practice](#ah-practice)
+
+API endpoint(s) to retrieve resource content:
+- [GET /v1/{practiceid}/patients/{patientid}/documents/medicalrecord/{medicalrecordid}](https://docs.athenahealth.com/api/api-ref/document-type-medical-record#Get-patient's-medical-record-document)
+
+### Order
 
 Topics:
 - Order.cancel
@@ -517,10 +736,14 @@ Topics:
 - Order.submit
 - Order.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /v1/{practiceid}/patients/{patientid}/documents/order/{documentid}](https://docs.athenahealth.com/api/api-ref/document-type-order#Get-patient's-order-document)
 
-#### Patient
+### Patient
 
 Topics:
 - Patient.create
@@ -528,32 +751,44 @@ Topics:
 - Patient.merge
 - Patient.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/Patient/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/patient#READ_4)
 - [GET /v1/{practiceid}/patients/{patientid}](https://docs.athenahealth.com/api/api-ref/patient#Get-specific-patient-record)
 
-#### PatientCase
+### PatientCase
 
 Topics:
 - PatientCase.add-note
 - PatientCase.create
 - PatientCase.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /v1/{practiceid}/patients/{patientid}/documents/patientcase/{documentid}](https://docs.athenahealth.com/api/api-ref/document-type-patient-case#Get-patient-case-document-for-a-patient)
 
-#### PatientProblem
+### PatientProblem
 
 Topics:
 - PatientProblem.create
 - PatientProblem.delete
 - PatientProblem.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/Condition/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/condition#READ_6)
 - [GET /v1/{practiceid}/chart/{patientid}/problems](https://docs.athenahealth.com/api/api-ref/problems#Get-patient's-problem-list)
 
-#### Prescription
+### Prescription
 
 Topics:
 - Prescription.create
@@ -564,11 +799,15 @@ Topics:
 - Prescription.reopen
 - Prescription.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/MedicationRequest/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/medication-request#READ_6)
 - [GET /v1/{practiceid}/patients/{patientid}/documents/prescription/{documentid}](https://docs.athenahealth.com/api/api-ref/document-type-prescription#Get-specific-prescription-document-for-given-patient)
 
-#### Provider
+### Provider
 
 Topics:
 - Provider.create
@@ -576,17 +815,25 @@ Topics:
 - Provider.undelete
 - Provider.update
 
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department) (only for undelete)
+
 API endpoint(s) to retrieve resource content:
 - [GET /fhir/r4/Practitioner/{logicalId}](https://docs.athenahealth.com/api/fhir-r4/practitioner#READ_6)
 - [GET /v1/{practiceid}/providers/{providerid}](https://docs.athenahealth.com/api/api-ref/provider#Get-information-of-given-provider)
 
-#### ReferringProvider
+### ReferringProvider
 
 Topics:
 - ReferringProvider.create
 - ReferringProvider.delete
 - ReferringProvider.undelete
 - ReferringProvider.update
+
+Filters Applicable:
+- [ah-practice](#ah-practice)
+- [ah-department](#ah-department)
 
 API endpoint(s) to retrieve resource content:
 - [GET /v1/{practiceid}/referringproviders/{referringproviderid}](https://docs.athenahealth.com/api/api-ref/referring-provider#Get-information-of-given-referring-provider)
