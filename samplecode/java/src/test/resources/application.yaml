@@ -2,6 +2,13 @@ com:
   athenahealth:
     iam:
       host: https://localhost:8080/oauth2/v1/token
+    api:
+      baseUrl: https://api.preview.platform.athenahealth.com
+      fhirBasePath: /fhir/r4
+      scopes: athena/service/Athenanet.MDP.* system/SubscriptionTopic.read system/Subscription.write system/Subscription.read
+      endpoints:
+        appointment: /v1/{practiceid}/appointments/{id}
+        order: /v1/{practiceid}/patients/{patientid}/documents/order/{id}
     mdp:
       host: https://localhost:8081/v1/
       scopes: athena/service/Athenanet.MDP.*
@@ -11,6 +18,6 @@ com:
         provider: providers
         claim: claims
     credentials:
-      clientId: <Client_Id>
-      clientSecret: <Client_Secret>
+      clientId: ${ATHENA_CLIENT_ID:test-client-id}
+      clientSecret: ${ATHENA_CLIENT_SECRET:test-client-secret}
       grantType: client_credentials

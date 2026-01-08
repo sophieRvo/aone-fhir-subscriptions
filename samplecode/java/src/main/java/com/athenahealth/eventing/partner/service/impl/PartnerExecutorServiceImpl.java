@@ -3,10 +3,12 @@ package com.athenahealth.eventing.partner.service.impl;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.IParser;
 import com.athenahealth.eventing.partner.exception.ErrorCode;
+import com.athenahealth.eventing.partner.service.EventStoreService;
 import com.athenahealth.eventing.partner.service.PartnerExecutorService;
 import com.athenahealth.eventing.partner.service.PartnerService;
 import com.athenahealth.eventing.partner.util.ValidationUtils;
 import org.hl7.fhir.r4b.model.Bundle;
+import org.hl7.fhir.r4b.model.Reference;
 import org.hl7.fhir.r4b.model.SubscriptionStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,9 @@ public class PartnerExecutorServiceImpl implements PartnerExecutorService {
 
     @Autowired
     private PartnerService partnerService;
+    
+    @Autowired
+    private EventStoreService eventStoreService;
 
     @Override
     public void inflatePayload(String request) {
@@ -25,6 +30,21 @@ public class PartnerExecutorServiceImpl implements PartnerExecutorService {
         IParser parser = fhirContext.newJsonParser();
         Bundle bundle = parser.parseResource(Bundle.class, request);
         validateBundle(bundle);
+        
+        // Extract metadata and store the event
+        Bundle.BundleEntryComponent bundleEntryComponent = bundle.getEntry().get(0);
+        SubscriptionStatus subscriptionStatus = (SubscriptionStatus) bundleEntryComponent.getResource();
+        String topic = subscriptionStatus.getTopic() != null ? subscriptionStatus.getTopic() : "unknown";
+        String subscriptionId = subscriptionStatus.getSubscription() != null && subscriptionStatus.getSubscription().getReference() != null 
+            ? subscriptionStatus.getSubscription().getReference().replace("Subscription/", "") 
+            : "unknown";
+        Integer eventsInNotification = subscriptionStatus.hasEventsInNotification() 
+            ? subscriptionStatus.getEventsInNotification() 
+            : 0;
+        
+        // Store the event
+        eventStoreService.storeEvent(request, topic, subscriptionId, eventsInNotification);
+        
         partnerService.inflatePayload(bundle);
     }
 

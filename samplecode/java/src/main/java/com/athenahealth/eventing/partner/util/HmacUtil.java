@@ -25,16 +25,21 @@ public class HmacUtil {
         return null;
     }
 
-    public static boolean compareHmac(String message1, String message2, String secret)  {
+    public static boolean compareHmac(String hexSignature1, String hexSignature2, String secret)  {
         try {
-            Mac algo = Mac.getInstance(HMAC_ALGORITHM);
-            SecretKeySpec secretKey = new SecretKeySpec(secret.getBytes(), HMAC_ALGORITHM);
-            algo.init(secretKey);
-
-            byte[] hash1 = algo.doFinal(message1.getBytes());
-            byte[] hash2 = algo.doFinal(message2.getBytes());
-
-            return Arrays.equals(hash1, hash2);
+            // Both inputs are already hex-encoded HMAC signatures, so compare them directly
+            // Use constant-time comparison to prevent timing attacks
+            if (hexSignature1 == null || hexSignature2 == null) {
+                return false;
+            }
+            if (hexSignature1.length() != hexSignature2.length()) {
+                return false;
+            }
+            int result = 0;
+            for (int i = 0; i < hexSignature1.length(); i++) {
+                result |= hexSignature1.charAt(i) ^ hexSignature2.charAt(i);
+            }
+            return result == 0;
         } catch (Exception ex) {
             log.error("Error while comparing Hmac {}", ex);
         }

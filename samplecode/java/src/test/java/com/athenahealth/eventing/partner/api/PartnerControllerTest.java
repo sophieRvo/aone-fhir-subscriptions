@@ -26,8 +26,9 @@ class PartnerControllerTest {
     @Test
     void partnerWebhookTest() throws Exception {
         HttpHeaders headers = new HttpHeaders();
-        headers.set("content-type", "text/plain");
-        ResponseEntity<String> result = httpUtility.postForEntity(headers, port,"/test", FileUtils.getResourceFileContentAsString("mock/bundle.json"), String.class);
+        headers.set("content-type", "application/fhir+json");
+        headers.set("X-Hub-Signature", "sha256=test-signature");
+        ResponseEntity<String> result = httpUtility.postForEntity(headers, port,"/process-event", FileUtils.getResourceFileContentAsString("mock/bundle.json"), String.class);
         Assert.assertEquals(200, result.getStatusCodeValue());
 
     }

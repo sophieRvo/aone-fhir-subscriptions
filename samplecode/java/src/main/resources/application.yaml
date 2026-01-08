@@ -14,7 +14,6 @@ management:
           - prometheus
           - metrics
 
-
 springdoc:
   version: 1.0.0 # use @project.version@ to extract the artifact version from pom.xml
   api-docs:
@@ -35,11 +34,11 @@ com:
     api:
       baseUrl: https://api.preview.platform.athenahealth.com
       fhirBasePath: /fhir/r4
-      scopes: athena/service/Athenanet.MDP.* system/Patient.read
+      scopes: athena/service/Athenanet.MDP.* system/SubscriptionTopic.read system/Subscription.write system/Subscription.read system/Patient.read
       endpoints:
         appointment: /v1/{practiceid}/appointments/{id}
-        order: /v1/{practiceid}/patients/{patientid}/documents/order/{id}
+        order: /v1/{practiceid}/patients/{patientid}/documents/cleaorder/{id}
     credentials:
-      clientId: <Client_Id>
-      clientSecret: <Client_Secret>
+      clientId: ${ATHENA_CLIENT_ID:}
+      clientSecret: ${ATHENA_CLIENT_SECRET:}
       grantType: client_credentials

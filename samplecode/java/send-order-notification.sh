@@ -1,6 +1,6 @@
 #!/bin/sh
 
-curl -si --location --request POST 'http://localhost:8888/process-event' \
+curl -si --location --request POST 'http://localhost:8080/process-event' \
 --header 'accept: */*' \
 --header 'Content-Type: application/fhir+json' \
 --header 'X-Hub-Signature: sha256=f528cc71a3e0032482465fc4b55cda0f63d230e2072cbfdceb8c2feaf6a91838' \
